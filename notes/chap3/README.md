@@ -111,4 +111,32 @@ In other words, the job of #[tokio::main] is to give us the illusion of being ab
 main while, under the hood, it just takes our main asynchronous body and writes the necessary boilerplate
 to make it run on top of tokio’s runtime.
 
-### Implementing The Health Check Handler
+## Integration Test
+/health_check was our first endpoint and we verified everything was working as expected by launching the
+application and testing it manually via curl.
+
+Manual testing though is time-consuming: as our application gets bigger, it gets more and more expensive to manually check that all our assumptions on its behaviour are still valid every time we perform some changes. We’d like to automate as much as possible: those checks should be run in our CI pipeline every time we are committing a change in order to prevent regressions.
+
+### How do we test an Endpoint?
+An API is a means to an end: a tool exposed to the outside world to perform some kind of task (e.g. store a document, publish an email, etc.).
+
+The endpoints we expose in our API define the contract between us and our clients: a shared agreement about the inputs and the outputs of the system, its interface.
+
+The contract might evolve over time and we can roughly picture two scenarios: - backwards-compatible changes (e.g. adding a new endpoint); - breaking changes (e.g. removing an endpoint or dropping a field from the schema of its output).
+
+In the first case, existing API clients will keep working as they are. In the second case, existing integrations are likely to break if they relied on the violated portion of the contract.
+
+While we might intentionally deploy breaking changes to our API contract, it is critical that we do not break it accidentally.
+
+What is the most reliable way to check that we have not introduced a user-visible regression?
+Testing the API by interacting with itin the same exact way a user would: performing HTTP requests against it and verifying our assumptions on the responses we receive.
+
+This is often referred to as black box testing: we verify the behaviour of a system by examining its output given a set of inputs without having access to the details of its internal implementation.
+
+actix-web providessome conveniencesto interact with an Appwithout skipping the routing logic, but there are severe shortcomings to its approach.
+
+- migrating to another web framework would force us to rewrite our whole integration test suite. As much as possible, we’d like our integration tests to be highly decoupled from the technology underpinning our API implementation (e.g. having framework-agnostic integration tests is life-saving when you are going through a large rewrite or refactoring!);
+
+-  due to some actix-web’s limitations4, we wouldn’t be able to share our App startup logic between our production code and our testing code, therefore undermining our trust in the guarantees provided by our test suite due to the risk of divergence over time.
+
+We will opt for a fully black-box solution: we will launch our application at the beginning of each test and interact with it using an off-the-shelf HTTP client (e.g. reqwest).
